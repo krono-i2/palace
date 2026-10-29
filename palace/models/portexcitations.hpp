@@ -16,6 +16,7 @@ class LumpedPortOperator;
 class WavePortOperator;
 class SurfaceCurrentOperator;
 class CurrentDipoleOperator;
+class PlaneWaveOperator;
 
 // Small helper class to collect data of what (lumped / wave / surface current / current
 // dipole) sources are excited in driven and transient simulation, as stored in space_op;
@@ -41,6 +42,7 @@ public:
     std::vector<int> floquet_port = {};
     std::vector<int> current_port = {};
     std::vector<int> current_dipole = {};
+    std::vector<int> plane_wave = {};
 
     auto FlattenPortIndices() const
     {
@@ -50,6 +52,7 @@ public:
       out.insert(out.end(), floquet_port.cbegin(), floquet_port.cend());
       out.insert(out.end(), current_port.cbegin(), current_port.cend());
       out.insert(out.end(), current_dipole.cbegin(), current_dipole.cend());
+      out.insert(out.end(), plane_wave.cbegin(), plane_wave.cend());
       return out;
     }
 
@@ -61,7 +64,8 @@ public:
       auto n_floquet = floquet_port.size();
       auto n_current = current_port.size();
       auto n_dipole = current_dipole.size();
-      auto n_total = n_lumped + n_wave + n_floquet + n_current + n_dipole;
+      auto n_total =
+          n_lumped + n_wave + n_floquet + n_current + n_dipole + plane_wave.size();
 
       if (n_total != 1)
       {
@@ -102,7 +106,8 @@ public:
                   const WavePortOperator &wave_port_op,
                   const FloquetPortOperator &floquet_port_op,
                   const SurfaceCurrentOperator &surf_j_op,
-                  const CurrentDipoleOperator &dipole_op);
+                  const CurrentDipoleOperator &dipole_op,
+                  const PlaneWaveOperator &plane_wave_op);
 
   [[nodiscard]] int MaxIdx() const
   {

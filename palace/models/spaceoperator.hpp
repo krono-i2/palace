@@ -17,6 +17,7 @@
 #include "models/floquetportoperator.hpp"
 #include "models/lumpedportoperator.hpp"
 #include "models/materialoperator.hpp"
+#include "models/planewaveoperator.hpp"
 #include "models/portexcitations.hpp"
 #include "models/surfaceconductivityoperator.hpp"
 #include "models/surfacecurrentoperator.hpp"
@@ -74,6 +75,7 @@ private:
 
   // Operators for boundary conditions and source excitations.
   CurrentDipoleOperator current_dipole_op;
+  PlaneWaveOperator plane_wave_op;
   FarfieldBoundaryOperator farfield_op;
   SurfaceConductivityOperator surf_sigma_op;
   SurfaceImpedanceOperator surf_z_op;
@@ -416,6 +418,12 @@ public:
   // excitation is nonzero (and thus is true most of the time).
   bool GetExcitationVector(int excitation_idx, Vector &RHS);
   bool GetExcitationVector(int excitation_idx, double omega, ComplexVector &RHS);
+
+  // Add the total-field/scattered-field right-hand side of an incident plane wave with the
+  // given excitation index, if any, for the system operator A at the frequency omega.
+  bool AddPlaneWaveExcitationVector(int excitation_idx, double omega,
+                                    const ComplexOperator &A, ComplexVector &RHS);
+  const auto &GetPlaneWaveOp() const { return plane_wave_op; }
 
   // Separate out RHS vector as RHS = iω RHS1 + RHS2(ω). The return value indicates whether
   // or not the excitation is nonzero (and thus is true most of the time).
