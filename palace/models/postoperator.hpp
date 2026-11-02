@@ -291,6 +291,10 @@ protected:
 
   DomainPostOperator dom_post_op;    // Energy in bulk
   SurfacePostOperator surf_post_op;  // Dielectric Interface Energy, Flux, and FarField
+
+  // Backscattering directions (theta, phi) of the incident plane waves by excitation index,
+  // in which the far field is also evaluated for the monostatic radar cross section.
+  std::map<int, std::pair<double, double>> farfield_back;
   mutable InterpolationOperator interp_op;  // E & B fields: mutates during measure
 
   mutable Measurement measurement_cache;
