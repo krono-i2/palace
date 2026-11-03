@@ -11,8 +11,11 @@
 #include "linalg/gmg.hpp"
 #include "linalg/jacobi.hpp"
 #include "linalg/mumps.hpp"
+#include "linalg/mumpscomplex.hpp"
 #include "linalg/strumpack.hpp"
+#include "linalg/strumpackcomplex.hpp"
 #include "linalg/superlu.hpp"
+#include "linalg/superlucomplex.hpp"
 #include "utils/communication.hpp"
 #include "utils/configfile.hpp"
 #include "utils/iodata.hpp"
@@ -127,6 +130,89 @@ auto MakeWrapperSolver(const config::LinearSolverData &linear, U &&...args)
       linear.complex_coarse_solve, linear.drop_small_entries, linear.reorder_reuse);
 }
 
+// Sparse direct solver for the PML subdomain correction of the geometric multigrid
+// preconditioner: the solver specified by the "Type" option if it is a sparse direct
+// solver, otherwise the default sparse direct solver (STRUMPACK if available, which factors
+// the matrix in complex arithmetic, with half of the memory of the equivalent real-valued
+// system factored by the others). The PML subdomain matrix is always factored in complex
+// form, and is symmetric (but indefinite) unless the system matrix is not. The
+// factorization is never compressed, in double precision unless
+// "PMLSubdomainSinglePrecision" (with iterative refinement, STRUMPACK only), and the
+// accuracy of SuperLU_DIST factorizations is checked (its static pivoting can be unstable
+// for this indefinite matrix, in which case tiny pivot replacement and iterative refinement
+// are used): approximate solves can lead the (left-preconditioned) Krylov solver to
+// converge to an inaccurate solution.
+std::unique_ptr<Solver<ComplexOperator>>
+ConfigurePMLSubdomainSolver(const config::LinearSolverData &linear,
+                            MatrixSymmetry pc_mat_sym, int verbose, MPI_Comm comm)
+{
+  auto type =
+      (linear.type == LinearSolver::STRUMPACK_MP) ? LinearSolver::STRUMPACK : linear.type;
+  if (type != LinearSolver::SUPERLU && type != LinearSolver::STRUMPACK &&
+      type != LinearSolver::MUMPS && type != LinearSolver::CUDSS)
+  {
+#if defined(MFEM_USE_SUPERLU)
+    type = LinearSolver::SUPERLU;
+#elif defined(MFEM_USE_STRUMPACK)
+    type = LinearSolver::STRUMPACK;
+#elif defined(MFEM_USE_MUMPS)
+    type = LinearSolver::MUMPS;
+#else
+    MFEM_ABORT("PML subdomain correction requires building with SuperLU_DIST, STRUMPACK, "
+               "or MUMPS!");
+#endif
+  }
+  auto linear_pml = linear;
+  linear_pml.complex_coarse_solve = true;
+  linear_pml.strumpack_compression_type = SparseCompression::NONE;
+  const auto sym =
+      (pc_mat_sym == MatrixSymmetry::UNSYMMETRIC) ? pc_mat_sym : MatrixSymmetry::SYMMETRIC;
+  const int print = verbose - 1;
+  std::unique_ptr<Solver<ComplexOperator>> pc;
+  switch (type)
+  {
+    case LinearSolver::SUPERLU:
+#if defined(MFEM_USE_SUPERLU)
+      if (!linear.superlu_3d)
+      {
+        pc = std::make_unique<SuperLUComplexSolver>(comm, linear.sym_factorization,
+                                                    linear.reorder_reuse, print, true);
+      }
+      else
+      {
+        pc = MakeWrapperSolver<ComplexOperator, SuperLUSolver>(
+            linear_pml, comm, linear.sym_factorization, linear.superlu_3d,
+            linear.reorder_reuse, print, true);
+      }
+#endif
+      break;
+    case LinearSolver::STRUMPACK:
+#if defined(MFEM_USE_STRUMPACK)
+      pc = std::make_unique<StrumpackComplexSolver>(
+          comm, linear.sym_factorization, linear.pml_subdomain_single_precision,
+          linear.pml_subdomain_single_precision ? 2 : 0, print);
+#endif
+      break;
+    case LinearSolver::MUMPS:
+#if defined(MFEM_USE_MUMPS)
+      pc = std::make_unique<MumpsComplexSolver>(comm, sym, linear.sym_factorization, 0.0,
+                                                linear.reorder_reuse, print);
+#endif
+      break;
+    case LinearSolver::CUDSS:
+#if defined(MFEM_USE_CUDSS)
+      pc = MakeWrapperSolver<ComplexOperator, CuDSSSolver>(
+          linear_pml, comm, sym, linear.sym_factorization, linear.reorder_reuse, print);
+#endif
+      break;
+    default:
+      break;
+  }
+  MFEM_VERIFY(pc, "Unable to construct the sparse direct solver for the PML subdomain "
+                  "correction!");
+  return pc;
+}
+
 template <OperatorType OperType>
 std::unique_ptr<Solver<OperType>>
 ConfigurePreconditionerSolver(const config::LinearSolverData &linear,
@@ -158,6 +244,18 @@ ConfigurePreconditionerSolver(const config::LinearSolverData &linear,
       break;
     case LinearSolver::SUPERLU:
 #if defined(MFEM_USE_SUPERLU)
+      if constexpr (std::is_same_v<OperType, ComplexOperator>)
+      {
+        // A complex-valued coarse solve (2D process grid) is factored in complex
+        // arithmetic.
+        if (linear.complex_coarse_solve && !linear.pc_mat_real &&
+            !linear.drop_small_entries && !linear.superlu_3d)
+        {
+          pc = std::make_unique<SuperLUComplexSolver>(comm, linear.sym_factorization,
+                                                      linear.reorder_reuse, print);
+          break;
+        }
+      }
       pc = MakeWrapperSolver<OperType, SuperLUSolver>(
           linear, comm, linear.sym_factorization, linear.superlu_3d, linear.reorder_reuse,
           print);
@@ -165,6 +263,19 @@ ConfigurePreconditionerSolver(const config::LinearSolverData &linear,
       break;
     case LinearSolver::STRUMPACK:
 #if defined(MFEM_USE_STRUMPACK)
+      if constexpr (std::is_same_v<OperType, ComplexOperator>)
+      {
+        // A complex-valued coarse solve without compression is factored in complex
+        // arithmetic.
+        if (linear.complex_coarse_solve && !linear.pc_mat_real &&
+            !linear.drop_small_entries &&
+            linear.strumpack_compression_type == SparseCompression::NONE)
+        {
+          pc = std::make_unique<StrumpackComplexSolver>(comm, linear.sym_factorization,
+                                                        false, 0, print);
+          break;
+        }
+      }
       pc = MakeWrapperSolver<OperType, StrumpackSolver>(
           linear, comm, linear.sym_factorization, linear.strumpack_compression_type,
           linear.strumpack_lr_tol, linear.strumpack_butterfly_l,
@@ -181,6 +292,21 @@ ConfigurePreconditionerSolver(const config::LinearSolverData &linear,
       break;
     case LinearSolver::MUMPS:
 #if defined(MFEM_USE_MUMPS)
+      if constexpr (std::is_same_v<OperType, ComplexOperator>)
+      {
+        // A complex-valued coarse solve is factored in complex arithmetic.
+        if (linear.complex_coarse_solve && !linear.pc_mat_real &&
+            !linear.drop_small_entries)
+        {
+          pc = std::make_unique<MumpsComplexSolver>(
+              comm, pc_mat_sym, linear.sym_factorization,
+              (linear.strumpack_compression_type == SparseCompression::BLR)
+                  ? linear.strumpack_lr_tol
+                  : 0.0,
+              linear.reorder_reuse, print);
+          break;
+        }
+      }
       pc = MakeWrapperSolver<OperType, MumpsSolver>(
           linear, comm, pc_mat_sym, linear.sym_factorization,
           (linear.strumpack_compression_type == SparseCompression::BLR)
@@ -231,6 +357,14 @@ ConfigurePreconditionerSolver(const config::LinearSolverData &linear,
       }
     }();
     gmg->EnableTimer();  // Enable timing for primary geometric multigrid solver
+    if constexpr (std::is_same_v<OperType, ComplexOperator>)
+    {
+      if (linear.pml_subdomain_solver == PMLSubdomainSolver::DIRECT)
+      {
+        gmg->SetPMLSubdomainSolver(
+            ConfigurePMLSubdomainSolver(linear, pc_mat_sym, verbose, comm));
+      }
+    }
     return gmg;
   }
   else
@@ -243,19 +377,19 @@ ConfigurePreconditionerSolver(const config::LinearSolverData &linear,
 
 MatrixSymmetry GetPreconditionerMatrixSymmetry(const IoData &iodata)
 {
-  // Mirrors the prior derivation that used to be stored on LinearSolverData::pc_mat_sym.
+  // The Floquet terms are not symmetric, also for a shifted preconditioner matrix.
   const auto &linear = iodata.solver.linear;
+  if (iodata.boundaries.periodic.wave_vector != std::array<double, 3>{0.0, 0.0, 0.0})
+  {
+    return MatrixSymmetry::UNSYMMETRIC;
+  }
   if (linear.pc_mat_shifted || iodata.problem.type == ProblemType::TRANSIENT ||
       iodata.problem.type == ProblemType::ELECTROSTATIC ||
       iodata.problem.type == ProblemType::MAGNETOSTATIC)
   {
     return MatrixSymmetry::SPD;
   }
-  if (iodata.boundaries.periodic.wave_vector == std::array<double, 3>{0.0, 0.0, 0.0})
-  {
-    return MatrixSymmetry::SYMMETRIC;
-  }
-  return MatrixSymmetry::UNSYMMETRIC;
+  return MatrixSymmetry::SYMMETRIC;
 }
 
 template <OperatorType OperType>

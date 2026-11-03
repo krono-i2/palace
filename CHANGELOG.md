@@ -74,6 +74,22 @@ See the [developer notes on schema versioning](https://awslabs.github.io/palace/
     magnetostatic solution space is broken across the film, so the mesh is not cracked.
     Requires a 3D mesh and an interior film. SchemaVer 4-1-0.
     [PR 992](https://github.com/awslabs/palace/pull/992).
+  - Added perfectly matched layer (PML) absorbing regions for 3D frequency domain driven and
+    eigenmode simulations, configured with blocks of `config["Domains"]["PML"]`, whose
+    `"Attributes"` are the domains of the PML regions (the other parameters have suitable
+    defaults). The stretch can be evaluated at a fixed reference frequency or at the
+    solve frequency (`"FrequencyDependent"`). For eigenmode simulations, the fraction of
+    the field energy of each mode in the PML regions is written to `eig.csv`, which
+    identifies the spurious modes of the layer. SchemaVer 4-2-0
+    [PR 1048](https://github.com/awslabs/palace/pull/1048).
+  - Improved the multigrid preconditioner for problems with PML regions: the smoothers do not
+    update the unknowns of strongly stretched PML elements (`"PMLSmootherThreshold"`), and
+    the complex-valued PML subdomain and coarse-level (`"ComplexCoarseSolve"`) matrices are
+    factored in complex arithmetic by SuperLU_DIST, STRUMPACK, and MUMPS, with half of the
+    memory of the equivalent real-valued systems (optionally in single precision for the
+    PML subdomain with STRUMPACK, `"PMLSubdomainSinglePrecision"`). The superbuild now
+    builds MUMPS with complex double precision (`zmumps`), which is required with
+    `PALACE_WITH_MUMPS`. [PR 1058](https://github.com/awslabs/palace/pull/1058).
 
 #### Interface Changes
 
@@ -141,6 +157,10 @@ See the [developer notes on schema versioning](https://awslabs.github.io/palace/
     longer cracked gives the average of the fluxes on the two sides, instead of the sum of
     the fluxes of the two faces of the cracked mesh.
     [PR 994](https://github.com/awslabs/palace/pull/994).
+  - Eigenmode simulations now postprocess the converged modes, with a warning, when fewer than
+    `Solver.Eigenmode.N` modes converge within `Solver.Eigenmode.MaxIts` iterations,
+    instead of aborting without output.
+    [PR 1048](https://github.com/awslabs/palace/pull/1048).
 
 #### Bug Fixes
 
@@ -372,6 +392,12 @@ See the [developer notes on schema versioning](https://awslabs.github.io/palace/
   - Added an MFEM patch for [mfem/mfem#5610](https://github.com/mfem/mfem/pull/5610),
     which keeps host hypre matrix products from reading a device-resident row cache.
     [PR 992](https://github.com/awslabs/palace/pull/992).
+  - The superbuild patches the BLACS of ScaLAPACK to receive messages with derived datatypes
+    packed and unpack them locally. This works around an MPICH bug for processes on the same
+    node, which corrupts complex-valued distributed factorizations of STRUMPACK and MUMPS
+    (packed messages received in several shared memory segments cannot be unpacked into
+    complex-valued elements split across segments).
+    [PR 1058](https://github.com/awslabs/palace/pull/1058).
 
 ## [0.18.1] - 2026-09-21
 

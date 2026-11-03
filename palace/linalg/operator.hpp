@@ -432,6 +432,17 @@ class BaseMultigridOperator : public OperType
 private:
   std::vector<std::unique_ptr<OperType>> ops, aux_ops;
 
+  // Local true DOFs and real and imaginary parts of the operator at the finest level for
+  // the PML subdomain correction of the multigrid preconditioner (empty if none). The PML
+  // subdomain matrix is the restriction of this operator to the PML true DOFs, and the
+  // matrices are taken by the multigrid solver.
+  std::vector<int> pml_tdofs;
+  mutable std::unique_ptr<mfem::HypreParMatrix> pml_ar, pml_ai;
+
+  // Local true DOFs of the primary and auxiliary spaces at each level which are not updated
+  // by the multigrid smoothers (empty if none).
+  std::vector<std::vector<int>> smoother_masks, aux_smoother_masks;
+
 public:
   BaseMultigridOperator(std::size_t l) : OperType(0)
   {
@@ -452,6 +463,33 @@ public:
   }
 
   bool HasAuxiliaryOperators() const { return !aux_ops.empty(); }
+
+  void SetPMLSubdomain(std::vector<int> &&tdofs, std::unique_ptr<mfem::HypreParMatrix> &&ar,
+                       std::unique_ptr<mfem::HypreParMatrix> &&ai)
+  {
+    pml_tdofs = std::move(tdofs);
+    pml_ar = std::move(ar);
+    pml_ai = std::move(ai);
+  }
+  const std::vector<int> &GetPMLTrueDofs() const { return pml_tdofs; }
+
+  void SetSmootherMasks(std::vector<std::vector<int>> &&masks,
+                        std::vector<std::vector<int>> &&aux_masks)
+  {
+    smoother_masks = std::move(masks);
+    aux_smoother_masks = std::move(aux_masks);
+  }
+  const std::vector<int> &GetSmootherMask(std::size_t l) const
+  {
+    static const std::vector<int> empty;
+    return (l < smoother_masks.size()) ? smoother_masks[l] : empty;
+  }
+  const std::vector<int> &GetAuxiliarySmootherMask(std::size_t l) const
+  {
+    static const std::vector<int> empty;
+    return (l < aux_smoother_masks.size()) ? aux_smoother_masks[l] : empty;
+  }
+  auto TakePMLMatrices() const { return std::pair{std::move(pml_ar), std::move(pml_ai)}; }
   auto GetNumLevels() const { return ops.size(); }
   auto GetNumAuxiliaryLevels() const { return aux_ops.size(); }
 

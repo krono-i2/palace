@@ -53,6 +53,7 @@ add_executable(unit-tests
   ${CMAKE_CURRENT_SOURCE_DIR}/test-nondimensionalize.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test-orthog.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test-outputdir.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/test-pml.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test-postoperator.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test-postoperatorcsv.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test-rap.cpp
@@ -61,6 +62,7 @@ add_executable(unit-tests
   ${CMAKE_CURRENT_SOURCE_DIR}/test-smoother.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test-spaceoperator.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test-strattonchu.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/test-complexdirectsolver.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test-surfacecharge.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test-surfacefunctional.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test-postoperator-boundary-viz.cpp
