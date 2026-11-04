@@ -19,11 +19,16 @@ See the [developer notes on schema versioning](https://awslabs.github.io/palace/
 
 #### New Features
 
-  - Radar cross section of incident plane waves (`Domains.PlaneWave`): with a far-field
-    surface (`Boundaries.Postprocessing.FarField`) in the scattered-field region, driven
-    simulations write the bistatic radar cross section in the far-field directions
-    (`farfield-rcs.csv`) and the monostatic one in the backscattering direction of each
-    plane wave (`rcs-monostatic.csv`).
+  - Incident plane wave excitations (`Domains.PlaneWave`) for driven simulations, with the
+    total-field/scattered-field formulation: the plane wave is injected on the boundary of a
+    total-field region given by volume attributes, the solution is the total field inside
+    and the scattered field outside, and the truncation of the domain only sees the
+    scattered field. With a far-field surface
+    (`Boundaries.Postprocessing.FarField`) in the scattered-field region, the bistatic
+    radar cross section is written in the far-field directions (`farfield-rcs.csv`), and
+    the monostatic one in the backscattering direction of each plane wave
+    (`rcs-monostatic.csv`). See the new example `examples/rcs_coated_sphere`. SchemaVer
+    4-3-0.
 
   - Far-field extraction (`Boundaries.Postprocessing.FarField`) on interior surfaces, with
     the surface normal oriented from an optional `"Center"` inside the surface, so that far
@@ -36,15 +41,18 @@ See the [developer notes on schema versioning](https://awslabs.github.io/palace/
     via `KineticInductance`); a `FluxLoop` over such a film imposes a prescribed fluxoid and
     the total inductance is read from the field energy.
     [PR 929](https://github.com/awslabs/palace/pull/929).
+
   - Added `Solver.Linear.LondonPCShift`, a preconditioner-only gauge shift that keeps the
     London magnetostatic solve SPD-solvable by AMS. Magnetostatic simulations with
     `Superconductor` or `FluxLoop` boundaries also enable
     `Solver.Linear.MGAuxiliarySmoother` by default. SchemaVer 3-0-1
     [PR 929](https://github.com/awslabs/palace/pull/929),
     [PR 1051](https://github.com/awslabs/palace/pull/1051).
+
   - Introduced the `"AbsTol"` option for linear solvers, defaulting to 0.0, to allow using
     an absolute tolerance when defining convergence. SchemaVer 2-1-0
     [PR 734](https://github.com/awslabs/palace/pull/734).
+
   - Added Method of Manufactured Solutions (MMS) verification for the electrostatic solver,
     confirming optimal `L2` convergence of the potential and recovered field on affine
     hexahedra and curved (second-order) tetrahedra, with polynomial exactness checked on
@@ -55,6 +63,7 @@ See the [developer notes on schema versioning](https://awslabs.github.io/palace/
     differentiation tool, enabled with a new `PALACE_WITH_ENZYME=ON` build option or the
     `+enzyme` Spack variant (used only to build the unit tests).
     [PR 901](https://github.com/awslabs/palace/pull/901).
+
   - Added `Boundaries.FluxLoop[].Excitation`, the port excitation convention for flux
     loops: loops sharing a positive excitation index are driven together in one
     magnetostatic solve, each at its own `FluxAmounts`, and `0` holds a loop at zero
@@ -63,6 +72,7 @@ See the [developer notes on schema versioning](https://awslabs.github.io/palace/
     are saved per excitation. The default, each loop its own excitation, is unchanged.
     SchemaVer 3-1-0.
     [PR 979](https://github.com/awslabs/palace/pull/979).
+
   - Error estimation for adaptive mesh refinement now uses broken finite element spaces, allowing
     discontinuous fields across interior boundaries without cracking the mesh. Mesh cracking
     is now a per-boundary physical modeling choice (see Interface Changes).
